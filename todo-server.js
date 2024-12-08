@@ -2,10 +2,9 @@ const http = require('http');
 const url = require('url');
 const fs = require('fs');
 
-const port = process.env.PORT || 3000; // RenderでPORT環境変数を使用
-const hostname = '0.0.0.0'; // Renderが要求する0.0.0.0を使用
+const port = process.env.PORT || 3000;
+const hostname = '0.0.0.0';
 
-// タスクデータを保存するファイル
 const todoFile = 'todos.json';
 
 // タスクデータを読み込む関数
@@ -26,14 +25,18 @@ const server = http.createServer((req, res) => {
     const parsedUrl = url.parse(req.url, true);
     const { pathname, query } = parsedUrl;
 
-    // タスクの一覧を取得
-    if (pathname === '/todos' && req.method === 'GET') {
+    if (pathname === '/' && req.method === 'GET') {
+        // デフォルトのルートでメッセージを表示
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/html');
+        res.end('<h1>Welcome to Todo App!</h1><p>Use /todos to manage your tasks.</p>');
+    } 
+    else if (pathname === '/todos' && req.method === 'GET') {
         const todos = readTodos();
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(todos));
-    }
-    // 新しいタスクを追加
+    } 
     else if (pathname === '/todos' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => {
@@ -48,8 +51,7 @@ const server = http.createServer((req, res) => {
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ message: 'Task added', todos }));
         });
-    }
-    // タスクを削除
+    } 
     else if (pathname === '/todos' && req.method === 'DELETE') {
         const id = parseInt(query.id, 10);
         let todos = readTodos();
@@ -58,9 +60,9 @@ const server = http.createServer((req, res) => {
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ message: 'Task deleted', todos }));
-    }
-    // その他のリクエスト
+    } 
     else {
+        // 他のルートにアクセスした場合
         res.statusCode = 404;
         res.setHeader('Content-Type', 'text/plain');
         res.end('Not Found');
