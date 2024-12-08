@@ -1,99 +1,73 @@
 const http = require('http');
+const url = require('url');
 const fs = require('fs');
 
-const hostname = '127.0.0.1';
-const port = 3000;
+const port = process.env.PORT || 3000; // RenderでPORT環境変数を使用
+const hostname = '0.0.0.0'; // Renderが要求する0.0.0.0を使用
 
-const filePath = 'tasks.json';
+// タスクデータを保存するファイル
+const todoFile = 'todos.json';
 
 // タスクデータを読み込む関数
-const loadTasks = () => {
-    try {
-        const data = fs.readFileSync(filePath, 'utf-8');
-        return JSON.parse(data);
-    } catch (err) {
-        return [];
+function readTodos() {
+    if (fs.existsSync(todoFile)) {
+        return JSON.parse(fs.readFileSync(todoFile, 'utf8'));
     }
-};
+    return [];
+}
 
 // タスクデータを保存する関数
-const saveTasks = (tasks) => {
-    fs.writeFileSync(filePath, JSON.stringify(tasks, null, 2));
-};
+function saveTodos(todos) {
+    fs.writeFileSync(todoFile, JSON.stringify(todos, null, 2));
+}
 
-// サーバー作成
+// サーバーの作成
 const server = http.createServer((req, res) => {
-    const tasks = loadTasks();
+    const parsedUrl = url.parse(req.url, true);
+    const { pathname, query } = parsedUrl;
 
-    if (req.method === 'GET' && req.url === '/') {
-        // タスク一覧とフォームを表示
+    // タスクの一覧を取得
+    if (pathname === '/todos' && req.method === 'GET') {
+        const todos = readTodos();
         res.statusCode = 200;
-        res.setHeader('Content-Type', 'text/html');
-        res.end(`
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Todo List</title>
-                <style>
-                    body { font-family: Arial, sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
-                    h1 { color: #333; }
-                    ul { list-style-type: none; padding: 0; }
-                    li { margin: 5px 0; padding: 10px; background: #fff; border: 1px solid #ccc; border-radius: 5px; display: flex; justify-content: space-between; }
-                    form { margin-top: 20px; }
-                    input, button { padding: 10px; margin: 5px; }
-                </style>
-            </head>
-            <body>
-                <h1>Todo List</h1>
-                <ul>
-                    ${tasks.map(task => `<li>${task.name} <a href="/delete?id=${task.id}">Delete</a></li>`).join('')}
-                </ul>
-                <form method="POST" action="/add">
-                    <input type="text" name="task" placeholder="New task" required>
-                    <button type="submit">Add Task</button>
-                </form>
-            </body>
-            </html>
-        `);
-    } else if (req.method === 'POST' && req.url === '/add') {
-        // タスクを追加
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(todos));
+    }
+    // 新しいタスクを追加
+    else if (pathname === '/todos' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => {
-            body += chunk.toString();
+            body += chunk;
         });
         req.on('end', () => {
-            const params = new URLSearchParams(body);
-            const taskName = params.get('task');
-            if (taskName) {
-                tasks.push({ id: tasks.length + 1, name: taskName });
-                saveTasks(tasks);
-            }
-            res.writeHead(302, { Location: '/' }); // リダイレクト
-            res.end();
+            const newTask = JSON.parse(body);
+            const todos = readTodos();
+            todos.push({ id: Date.now(), task: newTask.task });
+            saveTodos(todos);
+            res.statusCode = 201;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ message: 'Task added', todos }));
         });
-    } else if (req.method === 'GET' && req.url.startsWith('/delete')) {
-        // タスクを削除
-        const urlParams = new URL(req.url, `http://${req.headers.host}`);
-        const idToDelete = parseInt(urlParams.searchParams.get('id'), 10);
-        const updatedTasks = tasks.filter(task => task.id !== idToDelete);
-
-        // 再番号付け
-        updatedTasks.forEach((task, index) => {
-            task.id = index + 1;
-        });
-
-        saveTasks(updatedTasks);
-        res.writeHead(302, { Location: '/' }); // リダイレクト
-        res.end();
-    } else {
+    }
+    // タスクを削除
+    else if (pathname === '/todos' && req.method === 'DELETE') {
+        const id = parseInt(query.id, 10);
+        let todos = readTodos();
+        todos = todos.filter(todo => todo.id !== id);
+        saveTodos(todos);
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ message: 'Task deleted', todos }));
+    }
+    // その他のリクエスト
+    else {
         res.statusCode = 404;
-        res.end('404 Not Found');
+        res.setHeader('Content-Type', 'text/plain');
+        res.end('Not Found');
     }
 });
 
-// サーバーを起動
+// サーバーの起動
 server.listen(port, hostname, () => {
     console.log(`Server running at http://${hostname}:${port}/`);
 });
